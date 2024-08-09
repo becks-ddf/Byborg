@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant
+    container_name: tagmatch-qdrant
+    ports:
+      - "8333:6333" # Qdrant Service
+    volumes:
+      - ./data/qdrant:/qdrant/storage:z
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: tagmatch-app-service
+    working_dir: /app
+    command: uvicorn app:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8111:8000"
+    volumes:
+      - ./data:/app/data:z
+    depends_on:
+      - qdrant
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: tagmatch-ui-service
+    environment:
+      - API_BASE_URL=http://app:8000
+    working_dir: /app
+    command: python ui.py
+    ports:
+      - "7777:7860"
+    depends_on:
+      - app
+

@@ -1,0 +1,41 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyCompatibilityInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ourVersions">
+        <value>
+          <list size="1">
+            <item index="0" class="java.lang.String" itemvalue="3.13" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="11">
+            <item index="0" class="java.lang.String" itemvalue="python-Levenshtein" />
+            <item index="1" class="java.lang.String" itemvalue="google-cloud-pubsub" />
+            <item index="2" class="java.lang.String" itemvalue="pyArango" />
+            <item index="3" class="java.lang.String" itemvalue="tensorflow" />
+            <item index="4" class="java.lang.String" itemvalue="keras" />
+            <item index="5" class="java.lang.String" itemvalue="opentelemetry-api" />
+            <item index="6" class="java.lang.String" itemvalue="opentelemetry-sdk" />
+            <item index="7" class="java.lang.String" itemvalue="opentelemetry-exporter-jaeger" />
+            <item index="8" class="java.lang.String" itemvalue="pytest" />
+            <item index="9" class="java.lang.String" itemvalue="ray" />
+            <item index="10" class="java.lang.String" itemvalue="sphinx_automodapi" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="bark.Option.get_info_from_user" />
+          <option value="bark.Option.get_neccesary_info" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

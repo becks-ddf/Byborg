@@ -1,0 +1,8 @@
+pandas
+fastapi
+fastembed
+qdrant-client
+thefuzz
+pydantic
+pydantic-settings
+gradio
