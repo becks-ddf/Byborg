@@ -2,7 +2,8 @@ import io
 import logging
 import os
 import threading
-from typing import List
+from typing import List, Tuple
+from query import Query, BatchQuery
 
 import pandas as pd
 from fastapi import (BackgroundTasks, FastAPI, File, HTTPException, Request,
@@ -138,6 +139,19 @@ async def search(query: str, k: int = 5):
     response = {"match": {"semantic": semantic_results, "typo": typo_results}}
 
     return JSONResponse(content=response)
+
+
+
+@app.post("/search/")
+async def search2(query: Query):
+    response = await search(query.query, query.k)
+    return response
+
+
+@app.post("/batch/")
+async def batch(queries: List[Query]):
+    responses = [await search2(query) for query in queries]
+    return responses
 
 
 @app.get("/task-status/")
