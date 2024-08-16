@@ -52,13 +52,19 @@ class VecDB:
 
     def remove_collection(self):
         self.client.delete_collection(self.collection)
+        self.client.delete_collection(self.manual_collection)
 
-    def find_closest(self, vector: np.ndarray, k: int) -> List[str]:
+    def find_closest(self, query: str, vector: np.ndarray, k: int) -> List[ScoredPoint]:
         vec_list: List[float] = vector.tolist()
         # query_filter = Filter(must=[FieldCondition(key="is_accepted_tag", match=MatchValue(value=True))])
         query_filter = None
-        res = self.client.search(self.collection, query_vector=vec_list, limit=k, query_filter=query_filter)
-        return res
+        # search of manually defined tag matches and return them if found
+        manual_res = self.find_manual(vector, query)
+        if manual_res:
+            return [ScoredPoint(id=name, version=0, payload={"name": name}, score=1) for name in manual_res.payload['manual']]
+        else:
+            res = self.client.search(self.collection, query_vector=vec_list, limit=k, query_filter=query_filter)
+            return res
 
     def find_manual(self, vector: np.ndarray, name: str) -> Optional[ScoredPoint]:
         vec_list: List[float] = vector.tolist()
@@ -69,13 +75,19 @@ class VecDB:
         else:
             return None
 
-    def update_manual_by_name(self, name: str, vector: np.ndarray, manual_tags: list):
+    def update_manual_by_name(self, name: str, vector: np.ndarray, manual_tags: Optional[List[str]]):
         res = self.find_manual(vector, name)
-        if res:
+        if res and manual_tags:
             print(res.id)
             self.store(vector, {"name": res.payload["name"], "manual": manual_tags}, res.id, True)
-        else:
+        elif res:
+            self.client.delete(
+                collection_name=self.manual_collection,
+                points_selector=[res.id]
+            )
+        elif manual_tags:
             self.store(vector=vector, payload={"name": name, "manual": manual_tags}, manual=True)
+        return manual_tags
 
     def store(self, vector: np.ndarray, payload: Dict[str, Any], idx: Optional[int] = None, manual: bool = False) -> bool:
         vec_list: List[float] = vector.tolist()

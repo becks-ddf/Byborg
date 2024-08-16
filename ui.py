@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+from typing import List
 
 import gradio as gr
 import pandas as pd
@@ -19,6 +21,17 @@ def upload_csv(file):
         else:
             return response.json()['detail']
 
+
+def update_manual_tags(query, *manual_tags):
+    if query == "":
+        raise gr.Error("Please enter a search query")
+    manual_tags = [tag for tag in manual_tags if tag.strip()]
+    response = requests.post(f"{BASE_URL}/update_manual/",  params={'query': query}, json=manual_tags)
+    if response.status_code == 200:
+        data = response.json()
+        return data
+    else:
+        return response.json()['detail']
 
 def search_names(query, k=5):
     if query == "":
@@ -73,6 +86,17 @@ with gr.Blocks(css="body { font-family: Arial, sans-serif; } footer { visibility
 
         search_button.click(fn=search_names, inputs=[query, k], outputs=[semantic_table, typo_table])
         query.submit(fn=search_names, inputs=[query, k], outputs=[semantic_table, typo_table])
+
+    with gr.Tab("Update manual tags"):
+        with gr.Row():
+            query = gr.Textbox(label="Query", placeholder="Enter tag to update", elem_classes="tab-container")
+            # manual_tags = gr.List(label="List of tags", value=[['asd', 'ds']], elem_classes="tab-container")
+            with gr.Column():
+                manual_tags = [gr.Textbox(label=f"Tag {i + 1}", placeholder=f"Enter tag {i + 1}") for i in range(5)]
+        update_button = gr.Button("Update", elem_classes="tab-container")
+        output = gr.Textbox(label="Manual tags", interactive=False, elem_classes="tab-container")
+        update_button.click(fn=update_manual_tags, inputs=[query, *manual_tags], outputs=output)
+        query.submit(fn=update_manual_tags, inputs=[query, *manual_tags], outputs=output)
 
     with gr.Tab("Upload CSV"):
         with gr.Accordion("Information", open=False):

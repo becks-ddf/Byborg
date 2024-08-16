@@ -2,7 +2,7 @@ import io
 import logging
 import os
 import threading
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from query import Query, BatchQuery
 
 import pandas as pd
@@ -113,6 +113,12 @@ def process_csv(names_storage: List[str]):
         task_running.clear()
 
 
+@app.post("/update_manual/")
+async def update_manual(query: str, manual_tags: Optional[List[str]]):
+    res = vec_db.update_manual_by_name(query, embedder.embed(query), manual_tags)
+    return {"message": f"Manual tags {res} for query {query} has been updated "}
+
+
 @app.delete("/purge/")
 async def delete_collection():
     vec_db.remove_collection()
@@ -127,17 +133,17 @@ async def search(query: str, k: int = 5):
 
     # Fuzzy search
     fuzzy_matches = app.fuzzy_matcher.get_top_k_matches(query, k)
-
+    logging.error(f"fuzzy_matches: {fuzzy_matches}")
     # Semantic search
     query_vector = embedder.embed(query)
-    semantic_matches = vec_db.find_closest(query_vector, k)
+    semantic_matches = vec_db.find_closest(query, query_vector, k)
 
     # Formatting the response
     semantic_results = [{"name": match.payload["name"], "score": match.score} for match in semantic_matches]
     typo_results = [{"name": match["matched"], "score": match["score"]} for match in fuzzy_matches]
 
     response = {"match": {"semantic": semantic_results, "typo": typo_results}}
-
+    logging.error(f"response: {response}")
     return JSONResponse(content=response)
 
 
