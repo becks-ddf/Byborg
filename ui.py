@@ -33,14 +33,14 @@ def update_manual_tags(query, *manual_tags):
     else:
         return response.json()['detail']
 
-def search_names(query, k=5):
+def search_names(query, k=5, reduced=False):
     if query == "":
         raise gr.Error("Please enter a search query")
 
     if k < 1:
         raise gr.Error("Number of results should be at least 1")
 
-    response = requests.get(f"{BASE_URL}/search/", params={'query': query, 'k': k})
+    response = requests.get(f"{BASE_URL}/search/", params={'query': query, 'k': k, 'reduced': reduced})
     if response.status_code == 200:
         data = response.json()
         semantic_results = data['match']['semantic']
@@ -51,6 +51,7 @@ def search_names(query, k=5):
 
         return semantic_df, typo_df
     else:
+        # raise gr.Error(response.json()['detail'])
         return response.json()['detail'], pd.DataFrame()
 
 
@@ -71,21 +72,49 @@ def check_task_status():
         return "Something bad happened"
 
 
+def create_pca_collection(num_components: int):
+    if num_components < 1:
+        raise gr.Error("Number of components should be at least 1")
+    response = requests.post(f"{BASE_URL}/create_reduced_collection/", params={"num_components": num_components})
+    if response.status_code == 200:
+        data = response.json()
+        return data
+    else:
+        return response.json()['detail']
+
+
 # Gradio interface
 with gr.Blocks(css="body { font-family: Arial, sans-serif; } footer { visibility: hidden }") as demo:
     gr.Markdown(
-        "<h1 style='text-align: center;'>Tag Search API</h1><h3 style='text-align: center;'>by the AI Team</h3>")
+        "<h3 style='text-align: center;'>Tag Search API</h3>")
 
     with gr.Tab("Search"):
+        num_components = gr.Number(label="Number of components for PCA reduction", elem_classes="tab-container")
+        create_button = gr.Button("Create PCA reduction collection", elem_classes="tab-container")
+        with gr.Row():
+            message = gr.Textbox(label="message", interactive=False)
+            variance = gr.Number(label="explained variance", interactive=False)
+            error = gr.Number(label="reconstruction error", interactive=False)
+        create_button.click(fn=create_pca_collection, inputs=num_components, outputs=[message, variance, error])
+
         with gr.Row():
             query = gr.Textbox(label="Search Query", placeholder="Enter tag to search", elem_classes="tab-container")
             k = gr.Number(label="Number of Results", value=5, elem_classes="tab-container")
         search_button = gr.Button("Search", elem_classes="tab-container")
-        semantic_table = gr.Dataframe(label="Semantic Matches", interactive=False, elem_classes="tab-container")
-        typo_table = gr.Dataframe(label="Typo Matches", interactive=False, elem_classes="tab-container")
 
-        search_button.click(fn=search_names, inputs=[query, k], outputs=[semantic_table, typo_table])
-        query.submit(fn=search_names, inputs=[query, k], outputs=[semantic_table, typo_table])
+        with gr.Row():
+            with gr.Column():
+                semantic_table = gr.Dataframe(label="Semantic Matches", interactive=False, elem_classes="tab-container")
+                typo_table = gr.Dataframe(label="Typo Matches", interactive=False, elem_classes="tab-container",visible=True)
+                search_button.click(fn=search_names, inputs=[query, k], outputs=[semantic_table, typo_table])
+                query.submit(fn=search_names, inputs=[query, k], outputs=[semantic_table, typo_table])
+
+            with gr.Column():
+                reduced = gr.Checkbox(label="Reduced", value=True, visible=False)
+                semantic_table2 = gr.Dataframe(label="Semantic Matches for reduced vectors", interactive=False, elem_classes="tab-container")
+                typo_table2 = gr.Dataframe(label="Typo Matches for reduced vectors", interactive=False, elem_classes="tab-container",  visible=True)
+                search_button.click(fn=search_names, inputs=[query, k, reduced], outputs=[semantic_table2, typo_table2])
+                query.submit(fn=search_names, inputs=[query, k, reduced], outputs=[semantic_table2, typo_table2])
 
     with gr.Tab("Update manual tags"):
         with gr.Row():

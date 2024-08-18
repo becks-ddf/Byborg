@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -8,6 +9,8 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http.models import (CollectionInfo, Distance,
                                        FieldCondition, Filter, MatchValue,
                                        PointStruct, VectorParams, ScoredPoint)
+from sklearn.decomposition import PCA
+from sklearn.metrics import mean_squared_error
 
 
 class Embedder:
@@ -32,29 +35,53 @@ class VecDB:
         self.client = QdrantClient(host, port=int(port))
         self.collection = collection
         self.manual_collection = "manual_" + self.collection
+        self.reduced_collection = "reduced_" + self.collection
+        self.num_components = None  # Number of components for PCA
+        self.pca = None
         self.vector_size = vector_size
 
         if not self.collection_exists():
             self._create_collection()
 
-    def collection_exists(self) -> bool:
+        if self.collection_exists("reduced_"):
+            self.num_components = self.client.get_collection(self.reduced_collection).model_dump()["config"]["params"]["vectors"]["size"]
+            self.populate_pca(self.num_components)
+
+    def collection_exists(self, collection_name: str = None) -> bool:
+        if collection_name == "manual_":
+            name = self.manual_collection
+        elif collection_name == "reduced_":
+            name = self.reduced_collection
+        else:
+            name = self.collection
         try:
-            _ = self.client.get_collection(self.collection)
+
+            _ = self.client.get_collection(name)
             return True
         except UnexpectedResponse:
             return False
 
-    def _create_collection(self):
+    def _create_collection(self, num_components: int = None):
+        '''If number of components is provided it will create a 'reduced' collection for PCA'''
+
         dist = Distance.COSINE if self.distance == "cosine" else Distance.EUCLID
-        self.client.create_collection(self.collection,
-                                      vectors_config=VectorParams(size=self.vector_size, distance=dist))
-        self.client.create_collection(self.manual_collection, vectors_config=VectorParams(size=self.vector_size, distance=dist))
 
-    def remove_collection(self):
-        self.client.delete_collection(self.collection)
-        self.client.delete_collection(self.manual_collection)
+        if num_components is None:
+            self.client.create_collection(self.collection,
+                                          vectors_config=VectorParams(size=self.vector_size, distance=dist))
+            self.client.create_collection(self.manual_collection, vectors_config=VectorParams(size=self.vector_size, distance=dist))
+        else:
+            self.client.create_collection(self.reduced_collection,
+                                          vectors_config=VectorParams(size=num_components, distance=dist))
 
-    def find_closest(self, query: str, vector: np.ndarray, k: int) -> List[ScoredPoint]:
+    def remove_collection(self, collection_name: str = None):
+        if collection_name == "reduced_":
+            self.client.delete_collection(self.reduced_collection)
+        else:
+            self.client.delete_collection(self.collection)
+            self.client.delete_collection(self.manual_collection)
+
+    def find_closest(self, query: str, vector: np.ndarray, k: int, reduced: bool = False) -> List[ScoredPoint]:
         vec_list: List[float] = vector.tolist()
         # query_filter = Filter(must=[FieldCondition(key="is_accepted_tag", match=MatchValue(value=True))])
         query_filter = None
@@ -62,9 +89,12 @@ class VecDB:
         manual_res = self.find_manual(vector, query)
         if manual_res:
             return [ScoredPoint(id=name, version=0, payload={"name": name}, score=1) for name in manual_res.payload['manual']]
-        else:
+        elif not reduced:
             res = self.client.search(self.collection, query_vector=vec_list, limit=k, query_filter=query_filter)
-            return res
+        else:
+            reduced_vector = self.pca.transform(vector.reshape(1, -1)).reshape((-1))
+            res = self.client.search(self.reduced_collection, query_vector=reduced_vector.tolist(), limit=k, query_filter=query_filter)
+        return res
 
     def find_manual(self, vector: np.ndarray, name: str) -> Optional[ScoredPoint]:
         vec_list: List[float] = vector.tolist()
@@ -107,3 +137,39 @@ class VecDB:
             return -1
 
         return nb_points
+
+    def populate_pca(self, num_components: int):
+        '''Populates 'reduced_' collection by reduced vectors using PCA technique'''
+
+        self.num_components = num_components
+        response = self.client.scroll(collection_name=self.collection, with_vectors=True, limit=self.get_item_count())
+        vectors = [point.vector for point in response[0]]
+        vector_ids = [point.id for point in response[0]]
+        vector_names = [point.payload["name"] for point in response[0]]
+        vectors = np.array(vectors)
+
+        # Apply PCA to reduce dimensionality
+        self.pca = PCA(n_components=self.num_components)  # Adjust n_components as needed
+        reduced_vectors = self.pca.fit_transform(vectors)
+        logging.info(f"reduced_vectors.shape: {reduced_vectors.shape}")
+        explained_variance = sum(self.pca.explained_variance_ratio_)
+
+        reconstructed_vectors = self.pca.inverse_transform(reduced_vectors)
+        reconstruction_error = mean_squared_error(vectors, reconstructed_vectors)
+
+        # Delete existing 'reduced_' collection and create a new collection for reduced vectors
+        if self.collection_exists("reduced_"):
+            self.remove_collection("reduced_")
+        self._create_collection(self.num_components)
+
+        # Upsert reduced vectors to the new collection
+        self.client.upsert(
+            collection_name=self.reduced_collection,
+            points=[
+                PointStruct(id=vector_id, payload={"name": vector_name}, vector=reduced_vector.tolist())
+                for vector_id, vector_name, reduced_vector in zip(vector_ids, vector_names, reduced_vectors)
+            ]
+        )
+
+        return f'Reduced vectors for PCA with {self.num_components} components stored in collection: "reduced_"', explained_variance, reconstruction_error
+

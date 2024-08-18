@@ -64,6 +64,11 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+@app.post("/create_reduced_collection/")
+async def create_reduced_collection(num_components: int):
+    return vec_db.populate_pca(num_components)
+
+
 @app.post("/upload-csv/")
 async def upload_csv(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     if task_running.is_set():
@@ -121,29 +126,32 @@ async def update_manual(query: str, manual_tags: Optional[List[str]]):
 
 @app.delete("/purge/")
 async def delete_collection():
-    vec_db.remove_collection()
     app.names_storage = []
-    return {"message": "DB deleted successfully."}
+    vec_db.remove_collection("reduced_")
+    vec_db.remove_collection()
+    return {"message": f"DB deleted successfully."}
 
 
 @app.get("/search/")
-async def search(query: str, k: int = 5):
+async def search(query: str, k: int = 5, reduced: bool = False):
     if not query:
         raise HTTPException(status_code=400, detail="Query parameter is required.")
 
     # Fuzzy search
     fuzzy_matches = app.fuzzy_matcher.get_top_k_matches(query, k)
-    logging.error(f"fuzzy_matches: {fuzzy_matches}")
+    logging.info(f"fuzzy_matches: {fuzzy_matches}")
     # Semantic search
     query_vector = embedder.embed(query)
-    semantic_matches = vec_db.find_closest(query, query_vector, k)
-
+    try:
+        semantic_matches = vec_db.find_closest(query, query_vector, k, reduced)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     # Formatting the response
     semantic_results = [{"name": match.payload["name"], "score": match.score} for match in semantic_matches]
     typo_results = [{"name": match["matched"], "score": match["score"]} for match in fuzzy_matches]
 
     response = {"match": {"semantic": semantic_results, "typo": typo_results}}
-    logging.error(f"response: {response}")
+    logging.info(f"response: {response}")
     return JSONResponse(content=response)
 
 

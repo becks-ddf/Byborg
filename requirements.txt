@@ -6,3 +6,4 @@ thefuzz
 pydantic
 pydantic-settings
 gradio
+scikit-learn
