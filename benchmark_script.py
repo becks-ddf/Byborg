@@ -49,10 +49,6 @@ def benchmark_batch_search(query: Query, num_searches=100):
 
 
 if __name__ == "__main__":
-    vector_size = 128
-    num_vectors = 1000
-    num_searches = 100
-    test_duration = 10  # seconds
 
     print("Benchmarking Upload csv operation...")
     try:
